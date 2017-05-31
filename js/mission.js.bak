@@ -1,0 +1,1707 @@
+// enumeration of character types
+var enCharactors = {
+	nMarine:0
+	,nSpy:1
+	,nSniper:2
+}
+
+// enumeration of enemy character types
+var enEnemies = {
+	nSoldier:0
+	,nOfficer:1
+	,nSniper:2
+	,nGunner:3
+}
+
+
+// enumeration of characters' and enemies' action
+var enAction = {
+	nStay:0			// Only for characters, stay on current position
+	,nMove:1		// move 
+	,nChase:2			// Only for enemies. when enemy pursuing character
+	,nFire:3		// fire primary weapon
+	,nSubFire:4 	// Only for characters, fire secondary weapon
+	,nAction:5 		// Only for characters, each character's special action
+	,nView:6 		// Only for enemies, look around at current position
+	,nHold:7 		// keep doing current action
+	,nDie:8 		// die
+	,nDead:9 		// already dead
+}
+
+// enumeration for game status
+var enStatus = {
+	nInit : 0 			// game initialization status
+	,nReady : 1 		// prompt game start button status
+	,nMission : 2 		// introducing mission of next level status
+	,nPlay : 3 			// Game playing status
+	,nClear : 4 		// level clear status
+	,nOver : 5 			// game over status
+}
+
+// enumeration for level status
+var enPlayStatus = {
+	nNormal : 0 		// Normal status
+	,nWarning : 1 		// Warning Alarm alerted
+	,nInvasion : 2 		// Invasion Alarm alerted
+	,nAttack : 3 		// Attack Alarm alerted
+}
+
+// Enumeration for mission type
+var enMission = {
+	nClear : 0 			// Clear all the enemies
+	,nSpying : 1 		// Obtain confidential document in the enemy's base
+	,nRescue : 2 		// Rescue prisoner
+}
+
+// Mission Impossible canvas
+var stages = {
+	stageBG : null  			// background map stage
+	,stageCharacter : null 		// characters and objects stage
+	,stageUI : null 			// stage for UI
+}
+
+// variables to store user control status
+var controls = {
+	downX : 0 				// mouse down X coordinate
+	,downY : 0 				// mouse down Y coordinate
+	,oldX: 0 				// old x position of mouse (use for dragging)
+	,oldY: 0 				// old y position of mouse (use for dragging)
+	,bMouseDown: false
+	,bFireKey: false
+	,bSubKey: false
+}
+
+// game resources and playing data
+var mission = {
+	imgCharactors : [] // character sprite images
+	,imgEnemies : [] // enemy view range images
+	,imgMap : 0 // map image
+	,imgBunker : 0		// bunker image
+	,nFrame : 0 // number of frames
+	,nStatus : enStatus.nInit // game status 
+	,nPlay : enPlayStatus.nNormal // game play status
+	,nTotalScore : 0 // total score
+	,nScore : 0 // score of current level
+	,nEnemies : 0 // total number of enemies in this level
+	,nType : enMission.nClear // Type of mission in this level
+	,oEnemies : [] // Array of enemy object
+	,oCharacters : [] // Array of character object
+	,oControl : 0 // character object to control
+	,oSprite : 0 // sprite object to control
+	,nLevel : 1 // current level
+	,nMapWidth : 3000 // width of map, static value
+	,nMapHeight : 1500 // height of map, static value
+	,nMargin : 200 // margin of object placement, static value
+	,nCanWidth : 1200 // width of canvas(stage), static value
+	,nCanHeight : 600 // height of canvas(stage), static value
+}
+
+
+// object to store character and enemy object
+var oMan ={
+	nType : enCharactors.nSpy  // character type
+	,posX : 0		// current x position (absolute)
+	,posY : 0		// current y position (absolute)
+	,oldX : 0		// previous x position (absolute)
+	,oldY : 0		// previous y position (absolute)
+	,bStand : true					// is he stand	 (only for characters)
+	,bRight : true	// is he heading to right side
+	,nReady : 0		// how many turns left to do next action
+	,nextX : 0		// target position of current movement
+	,nextY : 0		// target position of current movement
+	,startX : 0						// character's moving range x start point (only for enemies)
+	,startY : 0						// character's moving range y start point (only for enemies)
+	,endX : 0						// character's moving range x end point (only for enemies)
+	,endY : 0						// character's moving range y end point (only for enemies)
+	,nextAction : enAction.nStay	// next action to do
+	,nSpeed : 4 	// character's speed
+	,sprite : null	// sprite sheet
+	,vision : null					// enemy's vision range (only for enemies)
+	,nShot : 300					// shot distance
+	,nVision : 300					// vision range distance
+	,nAngle : 45					// vision angle
+}
+
+
+// init function when the DOM is ready
+$(function(){
+	//register key down event handler
+	window.addEventListener( "keydown", keyPress, false );
+	window.addEventListener( "keyup", keyRelease, false )
+
+	$(document).onkeydown = keyPress();
+	$(document).onkeyup = keyRelease();
+
+//	$('#menu-play').click(playNow);
+	
+	setCursorByID("game-menu", "pointer");
+	
+	
+	// initialize game data and resources
+	initGame();
+	
+});
+
+function setCursorByID(id,cursorStyle) {
+ var elem;
+ if (document.getElementById &&
+    (elem=document.getElementById(id)) ) {
+  if (elem.style) elem.style.cursor=cursorStyle;
+ }
+}
+
+// main game loop of this game
+function gameloop(event){
+	// manage character's movement and action
+	manageCharacters();
+	
+	// manage enemy objects
+	manageEnemies();
+	
+	// redraw images on the stage(canvas)
+	stages.stageBG.update();
+	stages.stageCharacter.update();
+}
+
+/********************************************************************
+ *
+ *		Game and data initialization functions
+ *
+ *      
+ *
+ *
+ *
+ *********************************************************************/
+// initialize map and objects
+function initGame(){
+	// init game stage. create stages and set background image
+	initStages();
+	
+
+}
+
+function initVision(){	
+	for(nCnt=0 ; nCnt < mission.nEnemies ; nCnt++){
+		var oEnemy = mission.oEnemies[nCnt];
+		oEnemy.vision = new createjs.Shape();
+		switch(oEnemy.nType){
+			case enEnemies.nSoldier:
+				oEnemy.nVision = 400;
+				oEnemy.nAngle = Math.PI * 22.5 / 180;
+				oEnemy.nShot = 300;
+				break;
+			case enEnemies.nOfficer:
+				oEnemy.nVision = 250;
+				oEnemy.nAngle = Math.PI * 45 / 180;
+				oEnemy.nShot = 150;
+				break;
+			case enEnemies.nSniper:
+				oEnemy.nShot = oEnemy.nVision = 600;
+				oEnemy.nAngle = Math.PI * 5 / 180;
+				break;
+			case enEnemies.nGunner:
+				oEnemy.nShot = oEnemy.nVision = 300;
+				oEnemy.nAngle = Math.PI * 60 / 180;
+				break;
+		}
+		oEnemy.vision = drawVision(oEnemy, 0);
+		stages.stageCharacter.addChild(oEnemy.vision);
+	}
+	
+}
+
+function drawVision(oEnemy, angle){
+	var point = globalToStage(oEnemy.posX, oEnemy.posY - 20);
+	
+	var view ={
+		x : point.x
+		,y : point.y
+	}
+	
+	var oShape = oEnemy.vision;
+	oShape.graphics.clear();
+	if(oEnemy.bRight)
+		oShape.graphics.beginFill("rgba(255,0,0,0.1)").arc(view.x, view.y, oEnemy.nVision, -oEnemy.nAngle+angle, oEnemy.nAngle+angle, false).lineTo(view.x, view.y).closePath();
+	else
+		oShape.graphics.beginFill("rgba(255,0,0,0.1)").arc(view.x, view.y, oEnemy.nVision,-oEnemy.nAngle+angle+Math.PI, oEnemy.nAngle+angle+Math.PI, false).lineTo(view.x, view.y).closePath();
+
+	return oShape;
+}
+
+function removeVision(oEnemy){
+	var oShape = oEnemy.vision;
+	oShape.graphics.clear();
+	return oShape;
+}
+
+// initialize game stages
+function initStages(){
+
+	// load game map image and load it
+	mission.imgMap = new Image();
+	mission.imgMap.src = "./img/map.jpg";
+	
+	mission.imgBunker = new Image();
+	mission.imgBunker.src ="./img/bunker.png";
+	
+	// when game image loading is done, draw it on the stage
+	$(mission.imgMap).load(function(){
+		drawBGmap();
+		// init enemy objects
+		initObjects();
+
+		// init enemy vision range
+		initVision();
+
+		// init character objects
+		initCharacters(); 
+
+		// update and draw character stage
+		stages.stageCharacter.update();
+		// set frame rate and start
+		createjs.Ticker.setFPS(10);
+		createjs.Ticker.addEventListener("tick", gameloop);
+	});
+	
+	stages.stageCharacter = new createjs.Stage("game-canvas");
+	stages.stageUI = new createjs.Stage("game-menu");
+	
+	// register mouse event on game UI stage
+	stages.stageUI.mouseMoveOutside = false;
+	stages.stageUI.on("stagemousedown", mouseDown);
+	stages.stageUI.on("stagemousemove", mouseMove);
+	stages.stageUI.on("stagemouseup", mouseUp);
+}
+
+// draw game map call back function by loading done event
+function drawBGmap(){
+	stages.stageBG = new createjs.Stage("game-background-canvas");
+	mission.bitMap = new createjs.Bitmap(mission.imgMap);
+	stages.stageBG.addChild(mission.bitMap);	 
+	stages.stageBG.update();
+}
+ 
+// initialize enemy objects
+function initObjects(){
+	mission.nEnemies = Math.ceil(mission.nLevel * 2) + 5;
+	var nCnt = 0;
+	var nOfficers = Math.ceil(mission.nLevel * 0.5);
+	
+	for(nCnt = 0 ; nCnt < mission.nEnemies ; nCnt++)
+	{
+		var oEnemy;
+		var x = Math.random() * (mission.nMapWidth-(mission.nMargin*4)) + mission.nMargin*2;
+		var y = Math.random() * (mission.nMapHeight-(mission.nMargin)) + mission.nMargin/2;
+		switch(nCnt){
+			case 0: // create sniper
+				oEnemy = createEnemySniper(x, y);
+				break;
+			case 1: // create 2 heavy gunners
+			case 2:
+				oEnemy = createGunner(x,y);
+				oEnemy.bitBunker = new createjs.Bitmap(mission.imgBunker);
+				stages.stageCharacter.addChild(oEnemy.bitBunker);	 
+				oEnemy.bitBunker.x = x-50;
+				oEnemy.bitBunker.y = y-75;
+				
+				break;
+			default:
+				if(nCnt < 3+nOfficers) // officer
+				{
+					oEnemy = createOfficer(x, y);
+				}
+				else // soldier
+				{
+					oEnemy = creaeteSoldier(x, y);
+				}
+				break;
+		} // end of switch(nCnt)
+		
+		// store enemy object into mission global variable
+		mission.oEnemies[nCnt] = oEnemy;
+		if(oEnemy.bRight){
+			oEnemy.sprite.x = oEnemy.posX-50;
+		}
+		else{
+			oEnemy.sprite.x = oEnemy.posX - 150;
+			
+		}
+		oEnemy.sprite.y = oEnemy.posY-50;
+		//oEnemy.sprite.on("click", enemyClickEvent);
+		//oEnemy.sprite.addEventListener("click", enemyClickEvent)
+		stages.stageCharacter.addChild(oEnemy.sprite);		
+	} // end of for
+}
+
+function enemyClickEvent(event){
+	//alert("enemy clicked");
+	;
+}
+
+
+// create sniper enemy object.
+// parameter x,y is starting point of character
+// return value is sniper object
+function createEnemySniper(x, y){
+	var oSniper = jQuery.extend(true, {}, oMan);
+	oSniper.nType = enEnemies.nSniper;
+	oSniper.nSpeed = 2;
+	oSniper.nextX = oSniper.oldX = oSniper.startX = oSniper.endX = oSniper.posX = x;
+	oSniper.nextY = oSniper.oldY = oSniper.startY = oSniper.endY = oSniper.posY = y;
+	oSniper.bRight = false;
+	oSniper.nReady = 120;
+	oSniper.nextAction = enAction.nView;
+	
+	// Sprite sniper
+	var ssSniper = new createjs.SpriteSheet({ "animations":{
+			"stand":[0, 0],
+			"die":[0, 5],
+			"shoot1":[12, 17]},
+			"images":["./img/sniper_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":18
+			}
+		});
+	ssSniper.getAnimation("stand").speed = 1;
+	ssSniper.getAnimation("stand").next = false;
+	ssSniper.getAnimation("die").speed = 1;
+	ssSniper.getAnimation("die").next = false;
+	ssSniper.getAnimation("shoot1").speed = 1;
+	ssSniper.getAnimation("shoot1").next = "stand";
+	oSniper.sprite = new createjs.Sprite(ssSniper, "stand");
+	oSniper.sprite.scaleY = 1;
+	oSniper.sprite.scaleX = -1;
+	oSniper.sprite.gotoAndStop("stand");
+	return oSniper;
+}
+
+// create heavy gunner enemy object.
+// parameter x,y is starting point of character
+// return value is heavy gunner object
+function createGunner(x, y){
+	var oGunner = jQuery.extend(true, {}, oMan);
+	oGunner.nType = enEnemies.nGunner;
+	oGunner.nSpeed = 2;
+	oGunner.nextX = oGunner.oldX = oGunner.startX = oGunner.endX = oGunner.posX = x;
+	oGunner.nextY = oGunner.oldY = oGunner.startY = oGunner.endY = oGunner.posY = y;
+	oGunner.bRight = false;
+	oGunner.nReady = 200;
+	oGunner.nextAction = enAction.nView;
+	oGunner.bStand = true; // up to down status
+	
+	// gunner sniper
+	var ssGunner = new createjs.SpriteSheet({ "animations":{
+			"stand":[3, 3],
+			"watchDown": {
+                frames: [0,1,2,3,4],
+                next: "watchUp",
+                speed: 0.1
+				},
+			"watchUp": {
+                frames: [4,3,2,1,0],
+                next: "watchDown",
+                speed: 0.1
+				},
+			"die":[9, 14],
+			"shoot1":{
+                frames: [5,6,7,6,7,8,7,6,7],
+                next: "watch",
+                speed: 1
+				},
+			"dead":[14,14]},
+			"images":["./img/gunner_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":15
+			}
+		});
+	ssGunner.getAnimation("stand").speed = 1;
+	ssGunner.getAnimation("stand").next = false;
+	ssGunner.getAnimation("die").speed = 1;
+	ssGunner.getAnimation("die").next = false;
+	
+	oGunner.sprite = new createjs.Sprite(ssGunner, "watchDown");
+	oGunner.sprite.scaleY = 1;
+	oGunner.sprite.scaleX = -1;
+	oGunner.sprite.gotoAndPlay("watchDown");
+	
+	return oGunner;
+}
+
+
+// create soldier enemy object.
+// parameter x,y is starting point of character
+// return value is soldier object
+function creaeteSoldier(x, y){
+	var oSoldier = jQuery.extend(true, {}, oMan);
+	oSoldier.nType = enEnemies.nSoldier;
+	oSoldier.nSpeed = 2;
+	oSoldier.nReady = 60;
+	oSoldier.nextAction = enAction.nView;
+	oSoldier.posX = x;
+	oSoldier.posY = y;
+	// Sprite soldier
+	var ssSoldier = new createjs.SpriteSheet({ "animations":{
+			"stand":[0, 0],
+			"die":[6, 11],
+			"run":[0, 5],
+			"walk":[0, 5],
+			"shoot1":[12, 17],
+			"dead":[11, 11]},
+			"images":["./img/soldier_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":18
+			}
+		});
+	ssSoldier.getAnimation("stand").speed = 1;
+	ssSoldier.getAnimation("stand").next = false;
+	ssSoldier.getAnimation("die").speed = 1;
+	ssSoldier.getAnimation("die").next = false;
+	ssSoldier.getAnimation("walk").speed = 0.5;
+	ssSoldier.getAnimation("walk").next = "walk";
+	ssSoldier.getAnimation("run").speed = 1;
+	ssSoldier.getAnimation("run").next = "run";
+	ssSoldier.getAnimation("shoot1").speed = 1;
+	ssSoldier.getAnimation("shoot1").next = "stand";
+	oSoldier.sprite = new createjs.Sprite(ssSoldier, "stand");
+	oSoldier.sprite.scaleY = oSoldier.sprite.scaleX = 1;
+	oSoldier.sprite.gotoAndStop("stand");
+	
+	oSoldier.startX = oSoldier.posX - 200;
+	oSoldier.endX = oSoldier.posX + 200;
+	oSoldier.startY = oSoldier.posY - 200;
+	oSoldier.endY = oSoldier.posY + 200;
+	
+	// if start and ending point is out of stage range, modify it
+	if(oSoldier.startX < mission.nMargin)
+		oSoldier.startX = mission.nMargin;
+	else if(oSoldier.endX > mission.nMapWidth - mission.nMargin)
+		oSoldier.endX = mission.nMapWidth - mission.nMargin;
+	if(oSoldier.startY < mission.nMargin)
+		oSoldier.startY = mission.nMargin;
+	else if(oSoldier.endY > mission.nMapHeight - mission.nMargin)
+		oSoldier.endY = mission.nMapHeight - mission.nMargin;
+	
+	return oSoldier;
+}
+
+// create officer enemy object.
+// parameter x,y is starting point of character
+// return value is officer object
+function createOfficer(x, y){
+	var oOfficer = jQuery.extend(true, {}, oMan);
+	oOfficer.nType = enEnemies.nOfficer;
+	oOfficer.nSpeed = 2;
+	oOfficer.nReady = 60;
+	oOfficer.nextAction = enAction.nView;
+	oOfficer.posX = x;
+	oOfficer.posY = y;
+	
+	// Sprite Officer
+	var ssOfficer = new createjs.SpriteSheet({ "animations":{
+			"stand":[0, 0],
+			"die":[6, 11],
+			"walk":[0, 5],
+			"run":[0, 5],
+			"shoot1":[12, 17],
+			"dead":[11, 11]},
+			"images":["./img/officer_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":18
+			}
+		});
+	ssOfficer.getAnimation("stand").speed = 1;
+	ssOfficer.getAnimation("stand").next = false;
+	ssOfficer.getAnimation("die").speed = 1;
+	ssOfficer.getAnimation("die").next = false;
+	ssOfficer.getAnimation("walk").speed = 0.5;
+	ssOfficer.getAnimation("walk").next = "walk";
+	ssOfficer.getAnimation("run").speed = 1;
+	ssOfficer.getAnimation("run").next = "run";
+	ssOfficer.getAnimation("shoot1").speed = 1;
+	ssOfficer.getAnimation("shoot1").next = "stand";
+	oOfficer.sprite = new createjs.Sprite(ssOfficer, "stand");
+	oOfficer.sprite.scaleY = oOfficer.sprite.scaleX = 1;
+	oOfficer.sprite.gotoAndStop("stand");
+	
+	oOfficer.startX = mission.nMargin*2;
+	oOfficer.endX = mission.nMapWidth - mission.nMargin;
+	oOfficer.startY = mission.nMargin;
+	oOfficer.endY = mission.nMapHeight - mission.nMargin;
+	return oOfficer;
+}
+
+
+
+
+
+
+
+
+// initialize characters
+function initCharacters(){
+	initMarine(100, mission.nMapHeight - 100);
+	initSpy(50, mission.nMapHeight - 50);
+	initSniper(50, mission.nMapHeight - 100);
+	
+	// set marine as initial control character
+	mission.oControl = mission.oCharacters[enCharactors.nMarine];
+	moveStage(0,mission.nMapHeight);
+} 
+
+// initialize spy character
+function initSpy(x,y){
+	var oSpy = createSpy(x, y);
+	oSpy.sprite.x = oSpy.posX-50;
+	oSpy.sprite.y = oSpy.posY-50;
+	mission.oCharacters[enCharactors.nSpy] = oSpy;
+    stages.stageCharacter.addChild(mission.oCharacters[enCharactors.nSpy].sprite);
+	stages.stageCharacter.update();
+}
+
+// create spy character.
+// parameter x,y is starting point of character
+// return value is spy object
+function createSpy(x, y){
+	// spy's own property
+	var oSpy = jQuery.extend(true, {}, oMan);
+	oSpy.nType = enCharactors.nSpy;
+	oSpy.nSpeed = 4;
+	oSpy.nextX = oSpy.oldX = oSpy.posX = x;
+	oSpy.nextY = oSpy.oldY = oSpy.posY = y;
+	oSpy.nShot = 250;
+	
+	// Sprite spy
+	var ssSpy = new createjs.SpriteSheet({ "animations":{
+			"stand":[0, 0],
+			"die":[0, 5],
+			"run":[6, 11],
+			"shoot1":[12, 17],
+			"stab":[18, 23],
+			"pull":[24, 29],
+			"pull2":[24]},
+			"images":["./img/spy_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":30
+			}
+		});
+		
+	ssSpy.getAnimation("stand").speed = 1;
+	ssSpy.getAnimation("stand").next = false;
+    ssSpy.getAnimation("die").speed = 1;
+	ssSpy.getAnimation("die").next = false;
+	ssSpy.getAnimation("run").speed = 1;
+	ssSpy.getAnimation("run").next = "run";
+    ssSpy.getAnimation("shoot1").speed = 1;
+	ssSpy.getAnimation("shoot1").next = "stand";
+    ssSpy.getAnimation("stab").speed = 1;
+	ssSpy.getAnimation("stab").next = "stand";
+    ssSpy.getAnimation("pull").speed = 1;
+	ssSpy.getAnimation("pull").next = "pull";
+
+    oSpy.sprite = new createjs.Sprite(ssSpy, "stand");
+    oSpy.sprite.scaleY = oSpy.sprite.scaleX = 1;
+	oSpy.sprite.gotoAndStop("stand");
+	return oSpy;
+}
+
+// initialize sniper character
+function initSniper(x, y){
+	var oSniper = createSniper(x, y);
+	oSniper.sprite.x = oSniper.posX-50;
+	oSniper.sprite.y = oSniper.posY-50;	
+	mission.oCharacters[enCharactors.nSniper] = oSniper;
+    stages.stageCharacter.addChild(mission.oCharacters[enCharactors.nSniper].sprite);
+	stages.stageCharacter.update();
+}
+
+// create sniper character.
+// parameter x,y is starting point of character
+// return value is sniper object
+function createSniper(x, y){
+	// sniper's own properties
+	var oSniper = jQuery.extend(true, {}, oMan);
+	oSniper.nType = enCharactors.nSniper;
+	oSniper.nSpeed = 6;
+	oSniper.nextX = oSniper.oldX = oSniper.posX = x;
+	oSniper.nextY = oSniper.oldY = oSniper.posY = y;
+	oSniper.nShot = 550;
+	
+	// Sprite sniper
+	var ssSniper = new createjs.SpriteSheet({ "animations":{
+			"stand":[0, 0],
+			"die":[0, 5],
+			"run":[6, 11],
+			"shoot1":[12, 17],
+			"crawl":[18, 23],
+			"crawl2":[24,24],
+			"shoot2":[24, 29],
+			"standup":[30, 35]},
+			"images":["./img/sniper_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":36
+			}
+		});
+		
+	ssSniper.getAnimation("stand").speed = 1;
+	ssSniper.getAnimation("stand").next = false;
+    ssSniper.getAnimation("die").speed = 1;
+	ssSniper.getAnimation("die").next = false;
+	ssSniper.getAnimation("run").speed = 1;
+	ssSniper.getAnimation("run").next = "run";
+    ssSniper.getAnimation("shoot1").speed = 0.5;
+	ssSniper.getAnimation("shoot1").next = "stand";
+    ssSniper.getAnimation("shoot2").speed = 0.5;
+	ssSniper.getAnimation("shoot2").next = "crawl2";
+    ssSniper.getAnimation("crawl").speed = 1;
+	ssSniper.getAnimation("crawl").next = "crawl2";
+    ssSniper.getAnimation("standup").speed = 1;
+	ssSniper.getAnimation("standup").next = "stand";
+
+    oSniper.sprite = new createjs.Sprite(ssSniper, "stand");
+    oSniper.sprite.scaleY = oSniper.sprite.scaleX = 1;
+	oSniper.sprite.gotoAndStop("stand");
+	return oSniper;
+}
+
+function initMarine(x,y){
+	var oMarine = createMarine(x, y);
+	
+	mission.oCharacters[enCharactors.nMarine] = oMarine;
+	mission.oCharacters[enCharactors.nMarine].sprite.x = oMarine.posX-50;
+	mission.oCharacters[enCharactors.nMarine].sprite.y = oMarine.posY-50;
+    stages.stageCharacter.addChild(mission.oCharacters[enCharactors.nMarine].sprite);
+}
+
+// create marine character.
+// parameter x,y is starting point of character
+// return value is marine object
+function createMarine(x, y){
+	// marine's own property
+	var oMarine = jQuery.extend(true, {}, oMan);
+	oMarine.nType = enCharactors.nMarine;
+	oMarine.nSpeed = 8;
+	oMarine.nextX = oMarine.oldX = oMarine.posX = x;
+	oMarine.nextY = oMarine.oldY = oMarine.posY = y;
+	oMarine.nShot = 380;
+	
+	
+	var ssMarine = new createjs.SpriteSheet({ "animations":{
+			"stand":[0, 0],
+			"die":[0, 5],
+			"run":[6, 11],
+			"shoot1":[12, 17],
+			"throw":[18, 23],
+			"crawl":[24, 29],
+			"crawl2":[24],
+			"shoot2":[30, 35]},
+			"images":["./img/marine_sprites.png"],
+			"frames":{
+				"regX":0,
+				"regY":0,
+				"height":50,
+				"width":100,
+				"count":36
+			}
+		});
+		
+	ssMarine.getAnimation("stand").speed = 1;
+	ssMarine.getAnimation("stand").next = false;
+    ssMarine.getAnimation("die").speed = 1;
+	ssMarine.getAnimation("die").next = false;
+	ssMarine.getAnimation("run").speed = 1;
+	ssMarine.getAnimation("run").next = "run";
+    ssMarine.getAnimation("shoot1").speed = 1;
+	ssMarine.getAnimation("shoot1").next = "stand";
+    ssMarine.getAnimation("throw").speed = 1;
+	ssMarine.getAnimation("throw").next = "stand";
+    ssMarine.getAnimation("crawl").speed = 1;
+	ssMarine.getAnimation("crawl").next = "crawl";
+    ssMarine.getAnimation("shoot2").speed = 1;
+	ssMarine.getAnimation("shoot2").next = "crawl2";
+
+    oMarine.sprite = new createjs.Sprite(ssMarine, "stand");
+    oMarine.sprite.scaleY = oMarine.sprite.scaleX = 1;
+	oMarine.sprite.gotoAndStop("stand");
+	
+    return oMarine;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+/********************************************************************
+ *
+ *		Mouse event handlers
+ *
+ *      
+ *
+ *
+ *
+ *********************************************************************/
+// mouse move event handler
+function mouseMove(evt){
+	// when it is dragging
+	if(controls.bMouseDown)
+	{
+		var gapX = controls.oldX - evt.stageX;
+		var gapY = controls.oldY - evt.stageY;
+		
+		// move map position when it's dragging
+		moveMap(gapX, gapY);
+		controls.oldX = evt.stageX;
+		controls.oldY = evt.stageY;
+	}
+	else{
+		var point = stageToGlobal(evt.stageX, evt.stageY);
+		var nCnt = isClickEnemy(point.x, point.y);
+		if( nCnt < 0 ){
+			setCursorByID("game-menu", "pointer");
+		}
+		else{
+			var oEnemy = mission.oEnemies[nCnt];
+			if( isInRange(mission.oControl, oEnemy) )
+				setCursorByID("game-menu", "crosshair");
+			else
+				setCursorByID("game-menu", "not-allowed");
+		}
+	}
+}
+
+function isInRange(oCharacter, oEnemy){
+	var gapX = oEnemy.posX - oCharacter.posX;
+	var gapY = oEnemy.posY - oCharacter.posY;
+	var distance =  Math.sqrt( Math.pow(gapX,2) + Math.pow(gapY,2) );
+	
+	if(oCharacter.nShot < distance)
+		return false;
+	else
+		return true;
+}
+
+function isClickEnemy(x, y){
+	var nCnt;
+	//console.log("click: x="+x+", y="+y);
+	for(nCnt=0 ; nCnt < mission.nEnemies ; nCnt++){
+		//var x = mission.oEnemies[nCnt].x;
+		var oEnemy = mission.oEnemies[nCnt];
+		if(oEnemy.nextAction >= enAction.nDie)
+			continue;
+		//console.log("enemy: x="+oEnemy.posX+", y="+oEnemy.posY);
+		if (x >= oEnemy.posX-30 && x <= oEnemy.posX+30){
+			if(y >= oEnemy.posY-50 && y <= oEnemy.posY){
+				return nCnt;
+			}
+		}
+	}
+	return -1;
+}
+
+
+// mouse up event handler
+function mouseUp(evt){
+	var x = evt.stageX;
+	var y = evt.stageY;
+	var oCharacter = mission.oControl;
+	
+	controls.bMouseDown = false;
+	
+	if( (controls.downX == x) && (controls.downY == y) )
+	{
+		// to make position as bottom-centre of character object.
+		//x -=50;
+		//y -= 50;
+		
+		// if character is dead ignore event
+		if(oCharacter.nextAction >= enAction.nDie)
+		{
+			return;
+		}
+		
+		// if character is not ready to do next action
+		if(oCharacter.nReady > 0 )
+		{
+			return;
+		}
+		if (oCharacter.posX != x || oCharacter.posY !=y){
+			// mouse click with fire key
+			if(controls.bFireKey){
+				oCharacter.nextAction = enAction.nFire;
+				var point = stageToGlobal(x, y);
+				var nCnt = isClickEnemy(point.x, point.y);
+				if( nCnt < 0 )
+				{
+					; //enemyClickEvent(1);
+					//return;
+				}
+				else{
+					var oEnemy = mission.oEnemies[nCnt];
+					if(isInRange(oCharacter, oEnemy))
+					{
+						oEnemy.nextAction = enAction.nDie;
+						oEnemy.sprite.gotoAndPlay("die");
+						oEnemy.nReady=100;
+					}
+					else
+					{
+					}
+					
+				}
+			}
+			else if(controls.bSubKey){ // mouse click with secondary weapon fire key
+				if(oCharacter.nType == enCharactors.nSniper)
+					return;
+				else
+					oCharacter.nextAction = enAction.nSubFire;
+			}
+			else 
+			{
+				// sniper cannot move when he is hiding
+				if( (oCharacter.nType == enCharactors.nSniper) && !oCharacter.bStand ){
+					return;
+				}
+				else if ( (oCharacter.nType == enCharactors.nMarine) && !oCharacter.bStand ){
+					// set next action and change sprite sheet
+					oCharacter.nextAction = enAction.nMove;
+					oCharacter.sprite.gotoAndPlay("crawl");
+				}
+				else if ( (oCharacter.nType == enCharactors.nSpy) && !oCharacter.bStand ){
+					oCharacter.nextAction = enAction.nMove;
+					oCharacter.sprite.gotoAndPlay("pull");
+				}
+				else
+				{
+					// set next action and change sprite sheet
+					oCharacter.nextAction = enAction.nMove;
+					oCharacter.sprite.gotoAndPlay("run");
+				}
+			}
+			// set coordinates to move (or fire)
+			oCharacter.nextX = x - mission.bitMap.x;
+			oCharacter.nextY = y - mission.bitMap.y;
+			
+			if(oCharacter.nextX < 40)
+				oCharacter.nextX = 40;
+			if(oCharacter.nextY < 10)
+				oCharacter.nextY = 10;
+			// set start position of this movement
+			oCharacter.oldX = oCharacter.posX;
+			oCharacter.oldY = oCharacter.posY;
+		}
+	}
+}
+
+// mouse down event handler
+function mouseDown(evt){
+	controls.bMouseDown = true;
+	
+	// store mouse down event coordinate
+	controls.downX = evt.stageX;
+	controls.oldX = evt.stageX;
+	controls.downY = evt.stageY;
+	controls.oldY = evt.stageY;
+	console.log("down: x="+evt.stageX+", y="+evt.stageY);
+}
+
+
+/********************************************************************
+ *
+ *		functions to manage movement and action of objects
+ *
+ *      
+ *
+ *
+ *
+ *********************************************************************/
+// move vision
+// change vision range according to enemy's direction of movement and view
+function moveVision(oEnemy, nAngle){
+	var dev = (oEnemy.nextX - oEnemy.oldX);
+	var angle;
+	
+	if(dev == 0)
+		angle = 0;
+	else{
+		var fTan = ((oEnemy.nextY - oEnemy.oldY)/(oEnemy.nextX - oEnemy.oldX));
+		angle = Math.atan(fTan); // * 360 / (Math.PI * 2);
+	}
+	
+	angle = angle + (nAngle*Math.PI/180);
+
+	drawVision(oEnemy, angle);
+
+}
+
+function walkSoldier(oEnemy, bRun){
+	oEnemy.nextAction = enAction.nMove;
+	oEnemy.oldX = oEnemy.posX;
+	oEnemy.oldY = oEnemy.posY;
+	oEnemy.nextX = Math.random() * (oEnemy.endX-oEnemy.startX) + oEnemy.startX;
+	oEnemy.nextY = Math.random() * (oEnemy.endY-oEnemy.startY) + oEnemy.startY;
+	var gapX = oEnemy.nextX - oEnemy.oldX;
+	var gapY = oEnemy.nextY - oEnemy.oldY;
+	var length = Math.sqrt( Math.pow(gapX,2) + Math.pow(gapY,2) );
+	if(bRun){
+		oEnemy.nReady = Math.ceil(length / (oEnemy.nSpeed*2));
+		oEnemy.sprite.gotoAndPlay("run");
+	}else{
+		oEnemy.nReady = Math.ceil(length / oEnemy.nSpeed);
+		oEnemy.sprite.gotoAndPlay("walk");
+	}
+	oEnemy.moveX = gapX / oEnemy.nReady;
+	oEnemy.moveY = gapY / oEnemy.nReady;
+	if(gapX<0){
+		oEnemy.sprite.scaleX = -1;
+		oEnemy.bRight = false;
+	}
+	else{
+		oEnemy.sprite.scaleX = 1;
+		oEnemy.bRight = true;
+	}
+}
+
+function manageSoldier(oEnemy){
+	var nAngle = 0;
+	
+	switch(oEnemy.nextAction)
+	{
+		case enAction.nView:
+			oEnemy.nReady--;
+			// rotate in 60 frames => +- 30 degree
+			nAngle =  30 - oEnemy.nReady;
+			
+			if(oEnemy.nReady == 0){ // when looking around is done, move to another point
+				walkSoldier(oEnemy, false);
+			}
+			break;
+		case enAction.nMove:
+			oEnemy.posX += oEnemy.moveX;
+			oEnemy.posY += oEnemy.moveY;
+			oEnemy.nReady--;
+			if(oEnemy.nReady == 0){
+				oEnemy.nextAction = enAction.nView;
+				oEnemy.sprite.gotoAndPlay("stand");
+				oEnemy.nReady = 60;
+			}
+			break;
+		case enAction.nChase:
+			oEnemy.posX += oEnemy.moveX;
+			oEnemy.posY += oEnemy.moveY;
+			oEnemy.nReady--;
+			if(oEnemy.nReady == 0){
+				walkSoldier(oEnemy, true);
+			}
+			break;
+		
+		case enAction.nFire:
+			break;
+		case enAction.nDie:
+			removeVision(oEnemy);
+		case enAction.nDead:
+			return;
+	}
+	moveVision(oEnemy, nAngle);
+	var alert = checkInVision(oEnemy);
+	if(alert){
+		if(alert.nDistance < 250){
+			//shoot!!!
+			console.log("Close shoot!!");
+			oEnemy.nextAction = enAction.nFire;
+			oEnemy.nextX = mission.oCharacters[alert.nCharCount].posX;
+			oEnemy.nextY = mission.oCharacters[alert.nCharCount].posY;
+			
+			mission.oCharacters[alert.nCharCount].nextAction = enAction.nDie;
+			if(alert.x > oEnemy.posX)
+				mission.oCharacters[alert.nCharCount].bRight = false;
+			else
+				mission.oCharacters[alert.nCharCount].bRight = true;
+			
+		}else{
+			console.log("Away, chase!!!");
+						
+			oEnemy.nextX = alert.x;
+			oEnemy.nextY = alert.y;
+			oEnemy.oldX = oEnemy.posX;
+			oEnemy.oldY = oEnemy.posY;
+			var gapX = oEnemy.nextX - oEnemy.posX;
+			var gapY = oEnemy.nextY - oEnemy.posY;
+			var nSpeed = oEnemy.nSpeed*2;
+			
+			
+			// get distance to move
+			var length = Math.sqrt( Math.pow(gapX,2) + Math.pow(gapY,2) );
+			// calculate total turns to move
+			var turns = Math.ceil(length / nSpeed);
+			
+			// calculate next position to move
+			oEnemy.moveX = gapX / turns;
+			oEnemy.moveY = gapY / turns;
+			if(oEnemy.nextAction != enAction.nChase){
+				oEnemy.nextAction = enAction.nChase;
+				oEnemy.sprite.gotoAndPlay("run");
+			}
+			oEnemy.nReady = turns;
+			
+		}
+	}
+}
+
+function manageOfficer(oEnemy){
+	manageSoldier(oEnemy);
+}
+
+function viewGunner(oEnemy){
+	var nAngle = 0;
+	if(!oEnemy.bRight && oEnemy.bStand){
+		nAngle = -40 - (200-oEnemy.nReady);
+		//oEnemy.vision[1].rotation = oEnemy.vision[0].rotation = 90 + oEnemy.nReady;
+		if(oEnemy.nReady == 150){
+			oEnemy.bRight = true;
+			oEnemy.sprite.scaleX *= -1;
+			oEnemy.bStand = false; // down to up
+			oEnemy.sprite.gotoAndPlay("watchUp");
+			nAngle = 90 - (150-oEnemy.nReady);
+		}
+	}
+	else if(oEnemy.bRight && !oEnemy.bStand){
+		nAngle = 90 - (150-oEnemy.nReady);
+		//oEnemy.vision[1].rotation = oEnemy.vision[0].rotation = 40 + oEnemy.nReady;
+		if(oEnemy.nReady == 100){
+			oEnemy.bStand = true; // up to down
+			oEnemy.sprite.gotoAndPlay("watchDown");
+			//oEnemy.nReady = 50;
+		}
+	}
+	else if(oEnemy.bRight && oEnemy.bStand){
+		nAngle = 40 + (100 - oEnemy.nReady);
+		//oEnemy.vision[1].rotation = oEnemy.vision[0].rotation = 90-oEnemy.nReady;
+		if(oEnemy.nReady == 50){
+			oEnemy.bStand = false; // down to up
+			oEnemy.bRight = false;
+			oEnemy.sprite.scaleX *= -1;
+			oEnemy.sprite.gotoAndPlay("watchUp");
+			nAngle = (-40 - oEnemy.nReady);
+			//oEnemy.nReady = 50;
+		}
+	}else{
+		nAngle = (-40 - oEnemy.nReady);
+		//oEnemy.vision[1].rotation = oEnemy.vision[0].rotation = 90+50- oEnemy.nReady;
+		if(oEnemy.nReady == 0){
+			oEnemy.bStand = true; // up to down
+			oEnemy.sprite.gotoAndPlay("watchDown");
+			oEnemy.nReady = 200;
+			//oEnemy.nReady = 50;
+		}
+	}
+	return nAngle;
+	moveVision(oEnemy, nAngle);
+}
+
+function manageGunner(oEnemy){
+	var nAngle = 0;
+	oEnemy.nReady--;
+	switch(oEnemy.nextAction){
+		case enAction.nView:
+			nAngle = viewGunner(oEnemy);
+			// Check any characters in vision range
+			break;
+		case enAction.nFire:
+			break;
+		case enAction.nChase:
+			break;
+		case enAction.nDie:
+			removeVision(oEnemy);
+		case enAction.nDead:
+			return;
+	}
+	moveVision(oEnemy, nAngle);
+
+	var alert = checkInVision(oEnemy);
+	if(alert){
+		if(alert.nDistance < 300){
+			//shoot!!!
+			mission.oCharacters[alert.nCharCount].nextAction = enAction.nDie;
+			oEnemy.nextAction = enAction.nFire;
+			oEnemy.nextX = mission.oCharacters[alert.nCharCount].posX;
+			oEnemy.nextY = mission.oCharacters[alert.nCharCount].posY;
+			console.log("Gunner found char:"+alert.nCharCount+" x:" + alert.x +" y:" + alert.y);
+			if(alert.x > oEnemy.posX)
+				mission.oCharacters[alert.nCharCount].bRight = false;
+			else
+				mission.oCharacters[alert.nCharCount].bRight = true;
+		}
+	}
+	
+}
+
+function manageSniper(oEnemy){
+	oEnemy.nReady--;
+	var nAngle = 0;
+	switch(oEnemy.nextAction){
+		case enAction.nView:
+			if(oEnemy.nReady >= 60)
+				nAngle = -30 + oEnemy.nReady-60;
+			else
+				nAngle = 30 -oEnemy.nReady;
+			if(oEnemy.nReady == 0)
+				oEnemy.nReady = 120;
+			
+			break;
+		case enAction.nFire:
+			break;
+		case enAction.nChase:
+			brek;
+		case enAction.nDie:
+			removeVision(oEnemy);
+		case enAction.nDead:
+			return;
+	}
+	moveVision(oEnemy, nAngle);
+	var alert = checkInVision(oEnemy);
+	if(alert){
+		oEnemy.nextAction = enAction.nFire;
+		oEnemy.nextX = mission.oCharacters[alert.nCharCount].posX;
+		oEnemy.nextY = mission.oCharacters[alert.nCharCount].posY;
+		console.log("sniper found char:"+alert.nCharCount+" x:" + alert.x +" y:" + alert.y);
+		mission.oCharacters[alert.nCharCount].nextAction = enAction.nDie;
+		if(alert.x > oEnemy.posX)
+			mission.oCharacters[alert.nCharCount].bRight = false;
+		else
+			mission.oCharacters[alert.nCharCount].bRight = true;
+	}
+}
+
+function checkInVision(oEnemy){
+	var guard = {
+		x: 0
+		,y: 0
+		,nCharCount : 0
+		,nDistance : 0
+	}
+	
+	// Check any characters in vision range
+	for(var nCnt=0 ; nCnt <= enCharactors.nSniper ;nCnt++){
+		if(mission.oCharacters[nCnt].nextAction >= enAction.nDie)
+			continue;
+		var point = globalToStage(mission.oCharacters[nCnt].posX, mission.oCharacters[nCnt].posY);
+		if (oEnemy.vision.hitTest(point.x, point.y) == true)
+		{
+			// Victor Comment!! Hit character!!!
+			console.log("HIT");
+			guard.x = mission.oCharacters[nCnt].posX;
+			guard.y = mission.oCharacters[nCnt].posY;
+			guard.nCharCount = nCnt;
+			guard.nDistance = Math.sqrt( Math.pow((oEnemy.posX-guard.x),2) + Math.pow((oEnemy.posY-guard.y),2) );
+			return guard;
+		}
+	}
+	return null;
+}
+
+// manage enemies' action and movement
+function manageEnemies(){
+	var nCnt;
+	for(nCnt = 0 ; nCnt < mission.nEnemies ; nCnt++){
+		var oEnemy = mission.oEnemies[nCnt];
+		// change absolute position of whole map to position on current canvas(stage)
+		var point;
+		
+		switch(oEnemy.nType){
+			case enEnemies.nGunner:
+				manageGunner(oEnemy);
+				point = globalToStage(oEnemy.posX, oEnemy.posY);
+				oEnemy.bitBunker.x = point.x-50;
+				oEnemy.bitBunker.y = point.y-75;
+				break;
+			case enEnemies.nSniper:
+				manageSniper(oEnemy);
+				point = globalToStage(oEnemy.posX, oEnemy.posY);
+				break;
+			case enEnemies.nSoldier:
+				manageSoldier(oEnemy);
+				point = globalToStage(oEnemy.posX, oEnemy.posY);
+				break;
+			case enEnemies.nOfficer:
+				manageOfficer(oEnemy);
+				point = globalToStage(oEnemy.posX, oEnemy.posY);
+				break;
+		}
+		
+			
+		// change absolute position of whole map to position on current canvas(stage)
+		
+		oEnemy.sprite.x = point.x-50;
+		oEnemy.sprite.y = point.y-50;
+		//oEnemy.vision[1].x = oEnemy.vision[0].x = point.x;
+		//oEnemy.vision[1].y = oEnemy.vision[0].y = point.y-30;
+		// if current direction of view is left side
+		if(!oEnemy.bRight){
+			oEnemy.sprite.x += 100;
+		}
+	} // end of for
+}
+ 
+// manage character's action and movement
+// next action to do is decided by event handler (mouse and/or key event)
+// this function called by gameloop.
+function manageCharacters(){
+	var nCnt = enCharactors.nSniper;
+	
+	// check each characters.
+	for(nCnt = enCharactors.nSniper ; nCnt >= 0 ; nCnt--)
+	{
+		switch(mission.oCharacters[nCnt].nextAction)
+		{
+			case enAction.nMove: // if next action to do is move
+				moveCharacters(mission.oCharacters[nCnt]);
+				break;
+			case enAction.nHold: // if next action to do is same with current action
+				//keepCharacters(mission.oCharacters[nCnt]);
+				break;
+			case enAction.nFire: // if next action to do is fire main weapon
+				fireWeapon(mission.oCharacters[nCnt]);
+				break;
+			case enAction.nSubFire: // if next action to do is fire secondary weapon
+				fireSecond(mission.oCharacters[nCnt]);
+				break;
+			case enAction.nAction: // if next action to do is character's own special action; creeping, pull corpse, or hide
+				break;
+			case enAction.nDie: // if character took a bullet
+				mission.oCharacters[nCnt].sprite.gotoAndPlay("die");
+				mission.oCharacters[nCnt].nextAction = enAction.nDead;
+				break;
+			case enAction.nStay: // just staying...
+				break;
+			case enAction.nDead: // already dead man
+				break;
+		}
+		
+		// change absolute position of whole map to position on current canvas(stage)
+		var point = globalToStage(mission.oCharacters[nCnt].posX, mission.oCharacters[nCnt].posY);
+		mission.oCharacters[nCnt].sprite.x = point.x-50;
+		mission.oCharacters[nCnt].sprite.y = point.y-50;
+		// if current direction of view is left side
+		if(!mission.oCharacters[nCnt].bRight){
+			mission.oCharacters[nCnt].sprite.x += 100;
+		}
+		mission.oCharacters[nCnt].nReady = mission.oCharacters[nCnt].nReady > 0 ? mission.oCharacters[nCnt].nReady-1 : 0;
+	}
+	
+}
+
+function stageToGlobal(x, y){
+	var point = { x:0, y:0};
+	point.x = x - mission.bitMap.x;
+	point.y = y - mission.bitMap.y;
+	return point;
+}
+
+function globalToStage(x, y){
+	var point = { x:0, y:0};
+	point.x = mission.bitMap.x + x;
+	point.y = mission.bitMap.y + y;
+	return point;
+}
+
+function fireSecond(oCharacter){
+
+	if(oCharacter.nType == enCharactors.nSniper)
+	{
+		return;
+	} // no secondary weapon for sniper
+
+	var sprite = oCharacter.sprite;
+	
+	var gapX = oCharacter.nextX - oCharacter.oldX;
+	var gapY = oCharacter.nextY - oCharacter.oldY;
+	// if character goes to left side
+	if(gapX<0 && sprite.scaleX > 0)
+	{
+		sprite.scaleX *= -1;
+		oCharacter.bRight = false;
+	}
+	else if (gapX > 0 && sprite.scaleX < 0) // if character goes to right side
+	{
+		sprite.scaleX *= -1;
+		oCharacter.bRight = true;
+	}
+	
+	oCharacter.bStand = true;
+	if(oCharacter.nType == enCharactors.nMarine){
+		sprite.gotoAndPlay("throw");
+		oCharacter.nReady = 6; // no delay for marine
+	}else{
+		sprite.gotoAndPlay("stab");
+	}
+	
+	oCharacter.nextAction = enAction.nStay;
+	
+}
+
+function fireWeapon(oCharacter){
+	var sprite = oCharacter.sprite;
+	
+	var gapX = oCharacter.nextX - oCharacter.oldX;
+	var gapY = oCharacter.nextY - oCharacter.oldY;
+	// if character goes to left side
+	if(gapX<0)
+	{
+		sprite.scaleX = -1;
+		oCharacter.bRight = false;
+	}
+	else if (gapX > 0) // if character goes to right side
+	{
+		sprite.scaleX = 1;
+		oCharacter.bRight = true;
+	}
+	
+	if(oCharacter.bStand){
+		sprite.gotoAndPlay("shoot1");
+	}
+	else
+	{
+		sprite.gotoAndPlay("shoot2");
+	}
+	oCharacter.nReady = (oCharacter.nType * 6); // no delay for marine
+	oCharacter.nextAction = enAction.nStay;
+}
+
+// function to manage movement of character
+function moveCharacters(oCharacter){
+	var sprite = oCharacter.sprite;
+	
+	if(oCharacter.nType == enCharactors.nSniper)
+	{
+		// sniper cannot move when he is hiding
+		if(!oCharacter.bStand){
+			oCharacter.nextAction = enAction.nStay;
+		}
+	}
+	sprite.play();
+	
+	var gapX = oCharacter.nextX - oCharacter.oldX;
+	var gapY = oCharacter.nextY - oCharacter.oldY;
+	
+	var nSpeed = oCharacter.nSpeed;
+	
+	if(!oCharacter.bStand)
+	{
+		if(oCharacter.nType == enCharactors.nMarine)
+			nSpeed /= 5;
+		else
+			nSpeed /= 2;
+	}
+	
+	// get distance to move
+	var length = Math.sqrt( Math.pow(gapX,2) + Math.pow(gapY,2) );
+	// calculate total turns to move
+	var turns = Math.ceil(length / nSpeed);
+	// calculate next position to move
+	var moveX = gapX / turns;
+	var moveY = gapY / turns;
+	
+	if(isNaN(moveX)){
+		moveX = 0;
+	}
+	if(isNaN(moveY)){
+		moveY = 0;
+	}
+	
+	// if character goes to left side
+	if(gapX<0)
+	{
+		sprite.scaleX = -1;
+		oCharacter.bRight = false;
+		//sprite.x += 100;
+	}
+	else if (gapX > 0) // if character goes to right side
+	{
+		sprite.scaleX = 1;
+		oCharacter.bRight = true;
+		//sprite.x -= 100;
+	}
+	
+	// store position to move
+	oCharacter.posX += moveX;
+	oCharacter.posY += moveY;
+	
+	// if character arrived almost to target point
+	distance = Math.sqrt( Math.pow((oCharacter.nextX - oCharacter.posX),2) + Math.pow((oCharacter.nextY - oCharacter.posY),2) );
+	if(distance < (nSpeed/2) )
+	{
+		oCharacter.posX = oCharacter.nextX;
+		oCharacter.posY = oCharacter.nextY;
+		oCharacter.nextAction = enAction.nStay;
+		if(oCharacter.bStand)
+			sprite.gotoAndStop("stand");
+		else
+			sprite.gotoAndStop("crawl2");
+	}
+
+	//oCharacter.nextAction = enAction.nHold;
+}
+
+
+
+
+// when user dragging map
+function moveMap(gapX, gapY){
+
+	mission.bitMap.x -= gapX;
+	mission.bitMap.y -= gapY;
+	
+	//console.log("move: x = " + gapX + " ,y = " + gapY);
+	//console.log("move: mission.bitMap.x=" + mission.bitMap.x + " ,mission.bitMap.y=" + mission.bitMap.y);
+	
+	
+	if( mission.bitMap.x < -(mission.nMapWidth - mission.nCanWidth) ){
+		mission.bitMap.x = -(mission.nMapWidth - mission.nCanWidth);
+	}else if ( mission.bitMap.x > 0 ) {
+		mission.bitMap.x = 0;
+	}
+	
+	if( mission.bitMap.y < -(mission.nMapHeight - mission.nCanHeight)){
+		mission.bitMap.y = -(mission.nMapHeight - mission.nCanHeight);
+	}else if ( mission.bitMap.y > 0) {
+		mission.bitMap.y = 0;
+	}
+}
+
+// set coordinate x,y (argument value) as centre of the stage
+function moveStage(x, y){
+	var point = globalToStage(x, y);
+	var gapX = point.x - mission.nCanWidth/2;
+	var gapY = point.y - mission.nCanHeight/2;
+	moveMap(gapX, gapY);
+}
+
+function specialAction(){
+	if(mission.oControl.nextAction < enAction.nDie)
+	{
+		if(mission.oControl.nType == enCharactors.nSpy){
+			pullingCorpse(mission.oControl);
+		}
+		else if(mission.oControl.nType == enCharactors.nMarine){
+			crawling(mission.oControl);
+		}
+		else{
+			hiding(mission.oControl);
+		}
+	}
+	
+}
+
+// pulling dead body
+function pullingCorpse(oCharacter){
+	if(oCharacter.bStand) {
+		oCharacter.bStand = false;
+		oCharacter.sprite.gotoAndStop("pull");
+	}else{ // if character is crawling or hiding now
+		oCharacter.bStand = true;
+		oCharacter.sprite.gotoAndStop("stand");
+	}
+	oCharacter.nextAction = enAction.nStay;
+}
+
+// hide
+function hiding(oCharacter){
+	if(oCharacter.bStand){ // if character is standing up now
+		// change his action to crawling(or hiding)
+		oCharacter.bStand = false;
+		oCharacter.sprite.gotoAndPlay("crawl");
+	}else{ // if character is crawling or hiding now
+		oCharacter.bStand = true;
+		oCharacter.sprite.gotoAndPlay("standup");
+	}
+	
+	// change character's status as stay
+	oCharacter.nextAction = enAction.nStay;
+	oCharacter.nReady = 6;
+}
+
+// make character crawling (marine)
+function crawling(oCharacter){
+	if(oCharacter.bStand){ // if character is standing up now
+		// change his action to crawling(or hiding)
+		oCharacter.bStand = false;
+		oCharacter.sprite.gotoAndStop("crawl");
+	}else{ // if character is crawling or hiding now
+		oCharacter.bStand = true;
+		oCharacter.sprite.gotoAndStop("stand");
+	}
+	
+	// change character's status as stay
+	oCharacter.nextAction = enAction.nStay;
+}
+
+/********************************************************************
+ *
+ *		Key stroke event handling functions
+ *
+ *      And recognizing user input status function
+ *
+ *
+ *
+ *********************************************************************/
+
+// keyDown event handler
+function keyPress(){
+	switch(event.which){
+		case 90: // z key
+			// set fire key button flag as true
+			// mouse click with fire key is fire weapon
+			controls.bFireKey = true;
+			break;
+		case 88: // x key
+			// set secondary fire key button flag as true
+			// mouse click with fire key is fire weapon
+			controls.bSubKey = true;
+			break;
+		
+		default:
+			return;
+	}
+}
+
+
+
+
+// keyUp event handler
+function keyRelease(){
+	switch(event.which){
+		case 49: // press 1, select marine
+			mission.oControl = mission.oCharacters[enCharactors.nMarine];
+			moveStage(mission.oControl.posX, mission.oControl.posY);
+			break;
+		case 50: // press 2, select spy
+			mission.oControl = mission.oCharacters[enCharactors.nSpy];
+			moveStage(mission.oControl.posX, mission.oControl.posY);
+			break;
+		case 51: // press 3, select sniper
+			mission.oControl = mission.oCharacters[enCharactors.nSniper];
+			moveStage(mission.oControl.posX, mission.oControl.posY);
+			break;
+		case 90:
+			// set fire key button flag as true
+			// mouse click with fire key is fire weapon
+			controls.bFireKey = false;
+			break;
+		case 88:
+			// set secondary fire key button flag as true
+			// mouse click with fire key is fire weapon
+			controls.bSubKey = false;
+			break;
+		case 16: // shift key
+			specialAction();
+			break;
+		default:
+			return;
+	}
+}
+
+
+
+function moveLeft()
+{
+	if(controls.bRight){
+		return;
+	}else if(controls.bLeft == false){
+		controls.bLeft = true;
+		if(controls.bStand)
+			sprite.gotoAndPlay("run");
+		else
+			sprite.gotoAndPlay("crawl");
+	}
+/*
+	sprite.play();
+	controls.bLeft = true;
+*/
+}
+
+function moveRight()
+{
+	if(controls.bLeft){
+		return;
+	}else if(controls.bRight == false){
+		controls.bRight = true;
+		if(controls.bStand)
+			sprite.gotoAndPlay("run");
+		else
+			sprite.gotoAndPlay("crawl");
+	}
+/*
+	sprite.play();
+	controls.bRight = true;
+*/
+}
+
+function moveUp()
+{
+	if(controls.bDown){
+		return;
+	}else if(controls.bUp == false){
+		controls.bUp = true;
+		if(controls.bStand)
+			sprite.gotoAndPlay("run");
+		else
+			sprite.gotoAndPlay("crawl");
+	}
+	/*
+	sprite.play();
+	controls.bUp = true;
+	*/
+}
+
+function moveDown()
+{
+	if(controls.bUp){
+		return;
+	}else if(controls.bDown == false){
+		controls.bDown = true;
+		if(controls.bStand)
+			sprite.gotoAndPlay("run");
+		else
+			sprite.gotoAndPlay("crawl");
+	}
+	/*
+	sprite.play();
+	controls.bDown = true;
+	*/
+}
+
+
+
+
+

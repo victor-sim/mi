@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta charset="utf-8">
+	<meta name="title" content="Mission IMpossible" />
+	<meta name="description" content="HTML5 canvas game, Mission IMpossible, COMP397 team project" />
+	<title>Mission IMpossible, HTML5 canvas game with createJS library</title>
+	<link href='http://fonts.googleapis.com/css?family=Gloria+Hallelujah' rel='stylesheet' type='text/css'>	
+	<link rel="stylesheet" href="css/mission.css" />
+</head>
+<body>
+	<!-- <header> <p><H3>Mission 'IM'possible</H3></p> </header> -->
+	<div id="game">
+		<section id="game-scene" class="scene">
+			<canvas id="game-background-canvas" width="1200" height="600">
+				Sorry, your web browser does not support canvas content.
+			</canvas>
+			<canvas id="game-canvas" width="1200" height="600">
+				Sorry, your web browser does not support canvas content.
+			</canvas>
+			<canvas id="game-menu" width="1200" height="600" class="hide"></canvas>
+		</section>
+
+		<section id="menu-scene" class="scene">
+			<table>
+				<tr>
+					<td>Mission IM possible</td>
+				</tr>
+				<tr>
+					<td><img id="menu-mission" src="./images/mission/mission.png" onclick="playMission();">&nbsp;&nbsp;&nbsp;&nbsp;
+						<img id="menu-training" src="./images/mission/training.png" onclick="playTraining();"></td>
+				</tr>
+			</table>
+		</section>
+
+	</div>
+	
+	
+	<footer>
+		 <p><H4><a href="mission_reference.html" target="_blank">Help</a>
+		 &nbsp;&nbsp;&nbsp;- Move: Mouse Click, &nbsp;&nbsp;Map move: WASD key or mouse drag, &nbsp;&nbsp;Change Character: 1,2,3 number keys, 
+		 &nbsp;&nbsp;Shoot: Z + Click, &nbsp;&nbsp;Second Fire: X + click, &nbsp;&nbsp; Special Action: Shift</H4></p>
+		<h6>
+			&#169;Copyright 2014 Victor Sim, Yasuhiro, and Kenny &#124; Centennial College &#124; COMP397 Summer 2014
+			<br />
+			Mail to me : <a href="mailto:victor.ws.sim@gmail.com">victor.ws.sim&#64;gmail.com</a>
+		</h6>
+	</footer>
+
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script src="http://code.createjs.com/easeljs-0.7.1.min.js"></script>
+<script src="http://code.createjs.com/tweenjs-0.5.1.min.js"></script>
+<script src="http://code.createjs.com/soundjs-0.5.2.min.js"></script>
+<script src="http://code.createjs.com/preloadjs-0.4.1.min.js"></script>
+<script src="js/mission.js"></script>
+</body>
+</html>
